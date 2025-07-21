@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AliExpress OAuth Callback</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .success {
+            color: #28a745;
+            background: #d4edda;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .code-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            border-left: 4px solid #007bff;
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔑 AliExpress OAuth Authorization</h1>
+        
+        <div id="status"></div>
+        
+        <div id="authCode" style="display: none;">
+            <div class="success">
+                <strong>✅ Authorization Successful!</strong>
+            </div>
+            
+            <h3>Your Authorization Code:</h3>
+            <div class="code-box" id="codeValue"></div>
+            
+            <button onclick="copyCode()">📋 Copy Code</button>
+            <button onclick="testToken()">🧪 Test Get Token</button>
+            
+            <div class="step">
+                <h4>Next Steps:</h4>
+                <ol>
+                    <li><strong>Copy the authorization code above</strong></li>
+                    <li><strong>Use it to get your access token:</strong>
+                        <div class="code-box">
+curl -X POST "http://localhost:8000/auth/get-token?auth_code=YOUR_CODE_HERE"
+                        </div>
+                    </li>
+                    <li><strong>Or click "Test Get Token" above to test directly</strong></li>
+                </ol>
+            </div>
+        </div>
+        
+        <div id="noCode" style="display: none;">
+            <div class="error">
+                <strong>❌ No authorization code found</strong><br>
+                This usually means the authorization was cancelled or failed.
+            </div>
+            
+            <p>Try the authorization flow again:</p>
+            <a href="https://oauth.aliexpress.com/authorize?response_type=code&client_id=517178&redirect_uri=https://shaharosenfeld.github.io/aliexpress-callback/&state=test" 
+               style="display: inline-block; background: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                🔄 Retry Authorization
+            </a>
+        </div>
+        
+        <div id="tokenResult" style="display: none;">
+            <h3>Token Test Result:</h3>
+            <div id="tokenOutput" class="code-box"></div>
+        </div>
+        
+        <hr style="margin: 40px 0;">
+        
+        <div class="step">
+            <h4>🔧 For Development:</h4>
+            <p><strong>Your redirect URI:</strong> <code>https://shaharosenfeld.github.io/aliexpress-callback/</code></p>
+            <p><strong>App Key:</strong> <code>517178</code></p>
+            <p><strong>State:</strong> <span id="stateValue">-</span></p>
+        </div>
+    </div>
+
+    <script>
+        // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const authCode = urlParams.get('code');
+        const state = urlParams.get('state');
+        const error = urlParams.get('error');
+        
+        // Display state
+        document.getElementById('stateValue').textContent = state || 'Not provided';
+        
+        if (error) {
+            document.getElementById('status').innerHTML = `
+                <div class="error">
+                    <strong>❌ Authorization Error:</strong> ${error}<br>
+                    <small>Description: ${urlParams.get('error_description') || 'Unknown error'}</small>
+                </div>
+            `;
+        } else if (authCode) {
+            document.getElementById('authCode').style.display = 'block';
+            document.getElementById('codeValue').textContent = authCode;
+        } else {
+            document.getElementById('noCode').style.display = 'block';
+        }
+        
+        function copyCode() {
+            const code = document.getElementById('codeValue').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                alert('✅ Authorization code copied to clipboard!');
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = code;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('✅ Authorization code copied to clipboard!');
+            });
+        }
+        
+        async function testToken() {
+            const code = document.getElementById('codeValue').textContent;
+            const resultDiv = document.getElementById('tokenResult');
+            const outputDiv = document.getElementById('tokenOutput');
+            
+            resultDiv.style.display = 'block';
+            outputDiv.textContent = '🔄 Testing token exchange...';
+            
+            try {
+                const response = await fetch(`http://localhost:8000/auth/get-token?auth_code=${encodeURIComponent(code)}`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                outputDiv.textContent = JSON.stringify(data, null, 2);
+                
+                if (data.success) {
+                    outputDiv.style.background = '#d4edda';
+                    outputDiv.style.color = '#155724';
+                } else {
+                    outputDiv.style.background = '#f8d7da';
+                    outputDiv.style.color = '#721c24';
+                }
+            } catch (error) {
+                outputDiv.textContent = `❌ Error: ${error.message}\n\nMake sure your FastAPI server is running on localhost:8000`;
+                outputDiv.style.background = '#f8d7da';
+                outputDiv.style.color = '#721c24';
+            }
+        }
+        
+        // Auto-copy code if available
+        if (authCode) {
+            setTimeout(() => {
+                copyCode();
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
